@@ -58,4 +58,4 @@ angle-gui
 
 ## 当前实机接入状态
 
-仓库已包含 MVS 适配层，但本开发环境尚未发现 MVS 安装目录或 Python 示例模块。安装 SDK 后设置 `HIKROBOT_MVS_PYTHON_PATH` 指向包含 `MvCameraControl_class.py` 的目录，再进行相机枚举和取流验证。
+已检测到 `D:\MVS` 中的 MVS 4.5.1，程序可通过厂商设置的 `MVCAM_COMMON_RUNENV` 自动找到 Python SDK。SDK 模块加载和设备枚举调用已经验证；验证时相机未连接，设备数为 0。接通相机后还需完成真实取流、曝光调节和连续 500 帧稳定性验证。

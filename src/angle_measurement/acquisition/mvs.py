@@ -21,6 +21,26 @@ def _candidate_sdk_paths() -> list[Path]:
     configured = os.environ.get("HIKROBOT_MVS_PYTHON_PATH")
     if configured:
         paths.append(Path(configured))
+
+    development_root = os.environ.get("MVCAM_COMMON_RUNENV")
+    if development_root:
+        development = Path(development_root)
+        paths.extend(
+            [
+                development / "Samples" / "Python" / "MvImport",
+                development / "Samples" / "Python",
+            ]
+        )
+
+    configured_root = os.environ.get("HIKROBOT_MVS_ROOT")
+    if configured_root:
+        root = Path(configured_root)
+        paths.extend(
+            [
+                root / "Development" / "Samples" / "Python" / "MvImport",
+                root / "Development" / "Samples" / "Python",
+            ]
+        )
     for variable in ("ProgramFiles(x86)", "ProgramFiles"):
         base = os.environ.get(variable)
         if base:
@@ -30,7 +50,7 @@ def _candidate_sdk_paths() -> list[Path]:
                     Path(base) / "MVS" / "Development" / "Samples" / "Python",
                 ]
             )
-    return paths
+    return list(dict.fromkeys(paths))
 
 
 def load_mvs_module() -> ModuleType:
@@ -68,6 +88,7 @@ class MvsCameraSource(FrameSource):
         self.gain_db = gain_db
         self._module: ModuleType | None = None
         self._camera = None
+        self._sdk_initialized = False
         self._opened = False
         self._device_opened = False
         self._grabbing = False
@@ -109,10 +130,14 @@ class MvsCameraSource(FrameSource):
         if self._opened:
             return
         self._module = load_mvs_module()
-        device_info = self._enumerate()
-        self._camera = self._module.MvCamera()
-        self._check(self._camera.MV_CC_CreateHandle(device_info), "创建相机句柄")
         try:
+            initialize = getattr(self._module.MvCamera, "MV_CC_Initialize", None)
+            if initialize is not None:
+                self._check(initialize(), "初始化 MVS SDK")
+                self._sdk_initialized = True
+            device_info = self._enumerate()
+            self._camera = self._module.MvCamera()
+            self._check(self._camera.MV_CC_CreateHandle(device_info), "创建相机句柄")
             self._check(
                 self._camera.MV_CC_OpenDevice(self._constant("MV_ACCESS_Exclusive", 1), 0),
                 "打开相机",
@@ -130,6 +155,14 @@ class MvsCameraSource(FrameSource):
                     "TriggerSource", self._constant("MV_TRIGGER_SOURCE_SOFTWARE", 7)
                 ),
                 "设置软件触发",
+            )
+            self._check(
+                self._camera.MV_CC_SetEnumValue("ExposureAuto", 0),
+                "关闭自动曝光",
+            )
+            self._check(
+                self._camera.MV_CC_SetEnumValue("GainAuto", 0),
+                "关闭自动增益",
             )
             self._check(
                 self._camera.MV_CC_SetFloatValue("ExposureTime", float(self.exposure_us)),
@@ -190,7 +223,13 @@ class MvsCameraSource(FrameSource):
             if self._device_opened:
                 camera.MV_CC_CloseDevice()
             camera.MV_CC_DestroyHandle()
+        if self._module is not None and self._sdk_initialized:
+            finalize = getattr(self._module.MvCamera, "MV_CC_Finalize", None)
+            if finalize is not None:
+                finalize()
         self._camera = None
+        self._module = None
+        self._sdk_initialized = False
         self._opened = False
         self._device_opened = False
         self._grabbing = False

@@ -15,10 +15,19 @@
 C:\Program Files (x86)\MVS\Development\Samples\Python\MvImport
 ```
 
-如果安装路径不同，在启动程序前设置：
+适配层按以下顺序自动查找：
+
+1. `HIKROBOT_MVS_PYTHON_PATH` 指定的 `MvImport` 目录。
+2. MVS 安装程序创建的 `MVCAM_COMMON_RUNENV` 环境变量。
+3. `HIKROBOT_MVS_ROOT` 指定的 MVS 安装根目录。
+4. `Program Files` 下的常见安装目录。
+
+本机安装在 `D:\MVS`，安装程序已设置 `MVCAM_COMMON_RUNENV=D:\MVS\Development`，因此无需额外配置。如果自动检测失败，可任选一种方式显式设置：
 
 ```powershell
-$env:HIKROBOT_MVS_PYTHON_PATH='D:\your-mvs-sdk\Development\Samples\Python\MvImport'
+$env:HIKROBOT_MVS_PYTHON_PATH='D:\MVS\Development\Samples\Python\MvImport'
+# 或
+$env:HIKROBOT_MVS_ROOT='D:\MVS'
 ```
 
 检查模块是否可加载：
@@ -40,6 +49,8 @@ python -c "from angle_measurement.acquisition import MvsCameraSource; s=MvsCamer
 - PixelFormat = Mono8
 - TriggerMode = On
 - TriggerSource = Software
+- ExposureAuto = Off
+- GainAuto = Off
 - ExposureTime = 界面值
 - Gain = 界面值
 
@@ -47,4 +58,4 @@ python -c "from angle_measurement.acquisition import MvsCameraSource; s=MvsCamer
 
 ## 本开发环境状态
 
-开发时尚未在常见安装目录和下载目录发现 `MvCameraControl_class.py`，因此已经完成“SDK 缺失时的诊断”和离线模式测试，实机枚举、取流和 500 帧稳定性仍需在 SDK 安装后验收。
+2026-08-05 已在 `D:\MVS` 检测到 MVS 4.5.1，Python 模块加载成功，SDK 版本调用返回 `0x04050102`，设备枚举返回成功。验证时相机尚未连接，设备数为 0；接通相机后仍需完成单帧取流、连续 500 帧和曝光参数验收。
