@@ -1,0 +1,35 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.pyd
+.pytest_cache/
+.coverage
+htmlcov/
+build/
+dist/
+*.egg-info/
+.idea/
+.vscode/
+
+# User/runtime data
+data/input/*
+!data/input/.gitkeep
+data/output/*
+!data/output/.gitkeep
+logs/
+*.log
+*.mfa
+
+# Local camera SDK and runtime binaries
+vendor/
+sdk/
+*.dll
+*.so
+*.dylib
+
+# Generated calibration and recipe state
+calibration/*.json
+configs/local-*.json
+
+# PDF QA intermediates
+tmp/
