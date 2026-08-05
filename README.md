@@ -12,6 +12,7 @@
 - [标定指南](docs/guides/calibration.md)
 - [MVS SDK 配置](docs/guides/mvs-sdk-setup.md)
 - [操作指南](docs/guides/operator-guide.md)
+- [MVS 实机采集验收](docs/validation/2026-08-05-mvs-hardware-validation.md)
 
 ## 安装
 
@@ -58,4 +59,4 @@ angle-gui
 
 ## 当前实机接入状态
 
-已检测到 `D:\MVS` 中的 MVS 4.5.1，程序可通过厂商设置的 `MVCAM_COMMON_RUNENV` 自动找到 Python SDK。SDK 模块加载和设备枚举调用已经验证；验证时相机未连接，设备数为 0。接通相机后还需完成真实取流、曝光调节和连续 500 帧稳定性验证。
+已检测到 `D:\MVS` 中的 MVS 4.5.1，程序可通过厂商设置的 `MVCAM_COMMON_RUNENV` 自动找到 Python SDK。MV-CS050-10UC 的枚举、Mono 8、软件触发、单帧取流和两轮连续 500 帧测试均已通过。当前画面还没有被测工件，下一步是调整成像并配置真实测量带。

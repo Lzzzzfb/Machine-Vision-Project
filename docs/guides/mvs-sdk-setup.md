@@ -6,6 +6,7 @@
 2. 用 Micro USB3.0 B 型线缆直连电脑 USB3 接口，不使用普通 USB2 线或无源转接头。
 3. Windows 设备管理器中确认存在 `USB3 Vision Camera`。
 4. 打开 MVS 客户端，确认能枚举、连接并连续预览 MV-CS050-10UC。
+5. 验证结束后完全退出 MVS 客户端；测量程序使用独占访问，客户端仍运行时会返回 `0x80000203`。
 
 ## Python 模块路径
 
@@ -58,4 +59,4 @@ python -c "from angle_measurement.acquisition import MvsCameraSource; s=MvsCamer
 
 ## 本开发环境状态
 
-2026-08-05 已在 `D:\MVS` 检测到 MVS 4.5.1，Python 模块加载成功，SDK 版本调用返回 `0x04050102`，设备枚举返回成功。验证时相机尚未连接，设备数为 0；接通相机后仍需完成单帧取流、连续 500 帧和曝光参数验收。
+2026-08-05 已在 `D:\MVS` 检测到 MVS 4.5.1，Python 模块加载成功，SDK 版本调用返回 `0x04050102`。MV-CS050-10UC 的枚举、Mono 8、软件触发、单帧取流和两轮连续 500 帧测试均已通过。详细数据见[实机采集验收记录](../validation/2026-08-05-mvs-hardware-validation.md)。
