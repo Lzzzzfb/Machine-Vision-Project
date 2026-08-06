@@ -3,4 +3,4 @@
 from .models import MeasurementResult, RotatedRoi
 
 __all__ = ["MeasurementResult", "RotatedRoi"]
-__version__ = "0.3.0"
+__version__ = "0.3.1"

@@ -65,6 +65,8 @@ class MainWindow(QMainWindow):
         self._recipe_revision = 0
         self._actual_camera_fps = 0.0
         self._actual_measurement_fps = 0.0
+        self._measurement_task: MeasurementTask | None = None
+        self._measurement_task_token: object | None = None
         self.thread_pool = QThreadPool.globalInstance()
 
         self.image_panel = DualImagePanel()
@@ -258,7 +260,7 @@ class MainWindow(QMainWindow):
         thread = CameraAcquisitionThread(self.exposure_us, self.gain_db, self)
         thread.camera_connected.connect(self._camera_opened)
         thread.camera_disconnected.connect(self._camera_closed)
-        thread.frame_ready.connect(self._frame_received)
+        thread.frame_available.connect(self._frame_available)
         thread.frame_rate_changed.connect(self._camera_fps_changed)
         thread.acquisition_failed.connect(self._acquisition_failed)
         thread.finished.connect(self._acquisition_finished)
@@ -333,6 +335,16 @@ class MainWindow(QMainWindow):
             return
         self._error(message)
 
+    def _frame_available(self) -> None:
+        thread = self.sender()
+        if thread is not self.acquisition_thread or not isinstance(
+            thread, CameraAcquisitionThread
+        ):
+            return
+        frame = thread.take_latest_frame()
+        if frame is not None:
+            self._frame_received(frame)
+
     def _frame_received(self, frame: Frame) -> None:
         first = self.current_frame is None or self.current_frame.image.shape != frame.image.shape
         self.current_frame = frame
@@ -361,6 +373,7 @@ class MainWindow(QMainWindow):
     def _start_measurement(self, frame: Frame) -> None:
         recipe_snapshot = self.recipe
         recipe_revision = self._recipe_revision
+        task_token = object()
         task = MeasurementTask(
             frame,
             AngleMeasurementService(recipe_snapshot, self.calibration),
@@ -368,11 +381,17 @@ class MainWindow(QMainWindow):
             show_auxiliary=self.show_aux_action.isChecked(),
         )
         task.signals.completed.connect(
-            lambda measured_frame, result, overlay, recipe=recipe_snapshot, revision=recipe_revision: self._measurement_completed(
-                measured_frame, result, overlay, recipe, revision
+            lambda measured_frame, result, overlay, recipe=recipe_snapshot, revision=recipe_revision, token=task_token: self._measurement_completed(
+                measured_frame, result, overlay, recipe, revision, token
             )
         )
-        task.signals.failed.connect(self._measurement_worker_failed)
+        task.signals.failed.connect(
+            lambda traceback_text, token=task_token: self._measurement_worker_failed(
+                traceback_text, token
+            )
+        )
+        self._measurement_task = task
+        self._measurement_task_token = task_token
         self.measurement_status.setText("状态：测量中")
         self.thread_pool.start(task)
         self._update_action_states()
@@ -384,7 +403,9 @@ class MainWindow(QMainWindow):
         overlay,
         recipe_snapshot: MeasurementRecipe,
         recipe_revision: int,
+        task_token: object,
     ) -> None:
+        self._release_measurement_task(task_token)
         if recipe_revision != self._recipe_revision:
             self.live_controller.measurement_discarded()
             self._update_action_states()
@@ -402,13 +423,21 @@ class MainWindow(QMainWindow):
         self.measurement_status.setText(f"状态：{state} · 帧 {frame.frame_id}")
         self._update_action_states()
 
-    def _measurement_worker_failed(self, traceback_text: str) -> None:
+    def _measurement_worker_failed(
+        self, traceback_text: str, task_token: object
+    ) -> None:
+        self._release_measurement_task(task_token)
         self.live_controller.measurement_failed()
         message = traceback_text.splitlines()[-1] if traceback_text else "测量线程异常"
         self.measurement_status.setText("状态：测量线程异常")
         if not self.live_controller.live:
             self._error(message)
         self._update_action_states()
+
+    def _release_measurement_task(self, task_token: object) -> None:
+        if self._measurement_task_token is task_token:
+            self._measurement_task = None
+            self._measurement_task_token = None
 
     def _record_measurement_rate(self) -> None:
         now = time.monotonic()
