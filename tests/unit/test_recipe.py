@@ -11,7 +11,7 @@ def test_recipe_round_trip(tmp_path):
     path = recipe.save(tmp_path / "recipe.json")
     restored = MeasurementRecipe.load(path)
     assert restored == recipe
-    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 1
+    assert json.loads(path.read_text(encoding="utf-8"))["version"] == 2
 
 
 def test_roi_rejects_non_positive_size():
@@ -24,3 +24,18 @@ def test_recipe_rejects_unknown_version():
     data["version"] = 99
     with pytest.raises(ValueError, match="Unsupported"):
         MeasurementRecipe.from_dict(data)
+
+
+def test_v1_recipe_is_migrated_and_requires_right_roi_review():
+    band = {
+        "name": "edge",
+        "roi": {"center_x": 10, "center_y": 20, "length": 30, "width": 8, "angle_deg": 0},
+        "edge": {"polarity": "auto"},
+    }
+    migrated = MeasurementRecipe.from_dict(
+        {"version": 1, "name": "old", "slit": band, "platform": band}
+    )
+    assert migrated.version == 2
+    assert migrated.platform_left.roi == migrated.platform_right.roi
+    assert not migrated.platform_right_confirmed
+    assert migrated.require_height_compensation

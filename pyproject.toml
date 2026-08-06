@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hikrobot-angle-measurement"
-version = "0.1.0"
-description = "MV-CS050-10UC slit-to-platform 2D angle measurement system"
+version = "0.2.0"
+description = "MV-CS050-10UC bright-slit to platform dual-plane angle measurement system"
 readme = "README.md"
 requires-python = ">=3.10,<3.14"
 authors = [{ name = "Lzzzzfb", email = "749976124@qq.com" }]
@@ -22,6 +22,7 @@ dev = ["pytest>=8.0"]
 [project.scripts]
 angle-measure = "angle_measurement.cli:main"
 angle-calibrate = "angle_measurement.calibration.cli:main"
+angle-calibrate-pose = "angle_measurement.calibration.pose_cli:main"
 angle-gui = "angle_measurement.ui.launcher:main"
 
 [tool.setuptools.packages.find]

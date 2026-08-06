@@ -8,7 +8,7 @@ import numpy as np
 
 from angle_measurement.measurement.edge import to_gray_u8
 
-from .model import CalibrationData
+from .model import CalibrationData, PlatformPose
 
 
 class CalibrationError(RuntimeError):
@@ -109,4 +109,44 @@ def calibrate_from_images(
         inner_corners=inner_corners,
         per_view_errors=per_view_errors,
         source_images=accepted_paths,
+    )
+
+
+def estimate_platform_pose(
+    calibration: CalibrationData,
+    image: np.ndarray,
+    reference_image: str = "",
+) -> PlatformPose:
+    """Estimate the checkerboard plane pose after it is placed on the platform plane."""
+
+    calibration.ensure_image_size(image)
+    corners = detect_checkerboard(image, calibration.inner_corners)
+    if corners is None:
+        raise CalibrationError("平台姿态图中未检测到完整棋盘格")
+    object_points = _object_points(calibration.inner_corners, calibration.square_size_mm)
+    success, rotation_vector, translation_vector = cv2.solvePnP(
+        object_points,
+        corners.reshape(-1, 1, 2),
+        calibration.camera_matrix,
+        calibration.distortion_coefficients,
+        flags=cv2.SOLVEPNP_ITERATIVE,
+    )
+    if not success:
+        raise CalibrationError("平台姿态 solvePnP 求解失败")
+    projected, _ = cv2.projectPoints(
+        object_points,
+        rotation_vector,
+        translation_vector,
+        calibration.camera_matrix,
+        calibration.distortion_coefficients,
+    )
+    residuals = corners - projected.reshape(-1, 2)
+    rms = float(np.sqrt(np.mean(np.sum(np.square(residuals), axis=1))))
+    if not np.isfinite(rms):
+        raise CalibrationError("平台姿态重投影误差不是有限数")
+    return PlatformPose(
+        rotation_vector=rotation_vector,
+        translation_vector=translation_vector,
+        reprojection_error_px=rms,
+        reference_image=reference_image,
     )

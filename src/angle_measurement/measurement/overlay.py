@@ -19,6 +19,24 @@ def _draw_roi(canvas: np.ndarray, roi: RotatedRoi, color: tuple[int, int, int]) 
     cv2.polylines(canvas, [corners], True, color, 1, cv2.LINE_AA)
 
 
+def _draw_points(
+    canvas: np.ndarray,
+    points: np.ndarray | None,
+    line: LineModel | None,
+) -> None:
+    if points is None or line is None or len(line.inlier_mask) != len(points):
+        return
+    for point, inlier in zip(points, line.inlier_mask, strict=True):
+        cv2.circle(
+            canvas,
+            tuple(np.rint(point).astype(int)),
+            2,
+            (80, 255, 80) if inlier else (80, 80, 255),
+            -1,
+            cv2.LINE_AA,
+        )
+
+
 def draw_measurement_overlay(
     image: np.ndarray,
     recipe: MeasurementRecipe,
@@ -29,60 +47,44 @@ def draw_measurement_overlay(
     else:
         canvas = image[:, :, :3].copy()
     height, width = canvas.shape[:2]
-    _draw_roi(canvas, recipe.slit.roi, (255, 160, 0))
-    _draw_roi(canvas, recipe.platform.roi, (0, 200, 255))
+    _draw_roi(canvas, recipe.slit_center.roi, (0, 150, 255))
+    _draw_roi(canvas, recipe.platform_left.roi, (255, 220, 0))
+    _draw_roi(canvas, recipe.platform_right.roi, (220, 80, 220))
 
-    if result.line_slit is not None:
-        cv2.line(canvas, *_line_segment(result.line_slit, width, height), (255, 80, 0), 2, cv2.LINE_AA)
-        if result.slit_edge_points is not None:
-            for point, inlier in zip(
-                result.slit_edge_points,
-                result.line_slit.inlier_mask,
-                strict=True,
-            ):
-                cv2.circle(
-                    canvas,
-                    tuple(np.rint(point).astype(int)),
-                    2,
-                    (80, 255, 80) if inlier else (80, 80, 255),
-                    -1,
-                    cv2.LINE_AA,
-                )
-    if result.line_platform is not None:
-        cv2.line(
-            canvas,
-            *_line_segment(result.line_platform, width, height),
-            (0, 220, 255),
-            2,
-            cv2.LINE_AA,
-        )
-        if result.platform_edge_points is not None:
-            for point, inlier in zip(
-                result.platform_edge_points,
-                result.line_platform.inlier_mask,
-                strict=True,
-            ):
-                cv2.circle(
-                    canvas,
-                    tuple(np.rint(point).astype(int)),
-                    2,
-                    (80, 255, 80) if inlier else (80, 80, 255),
-                    -1,
-                    cv2.LINE_AA,
-                )
+    for line, color in (
+        (result.line_slit, (0, 100, 255)),
+        (result.line_platform_left, (255, 220, 0)),
+        (result.line_platform_right, (220, 80, 220)),
+        (result.line_platform, (60, 255, 255)),
+    ):
+        if line is not None:
+            cv2.line(canvas, *_line_segment(line, width, height), color, 2, cv2.LINE_AA)
+    _draw_points(canvas, result.slit_edge_points, result.line_slit)
+    _draw_points(canvas, result.platform_left_edge_points, result.line_platform_left)
+    _draw_points(canvas, result.platform_right_edge_points, result.line_platform_right)
+
     if result.intersection is not None:
         point = tuple(np.rint(result.intersection).astype(int))
         if 0 <= point[0] < width and 0 <= point[1] < height:
             cv2.drawMarker(canvas, point, (0, 0, 255), cv2.MARKER_CROSS, 18, 2)
 
-    if result.valid:
-        text = f"Angle: {result.angle_deg:.4f} deg  Confidence: {result.confidence:.2f}"
+    if result.valid and result.angle_deg is not None:
+        prefix = "Compensated" if result.height_compensated else "Projected"
+        text = f"{prefix} angle: {result.angle_deg:.4f} deg  Confidence: {result.confidence:.2f}"
         color = (20, 220, 20)
+    elif result.projected_angle_deg is not None:
+        text = f"INVALID - projected diagnostic: {result.projected_angle_deg:.4f} deg"
+        color = (0, 165, 255)
     else:
         text = "INVALID - see failure_reasons in CSV/JSON"
         color = (0, 0, 255)
-    calibration_text = "calibrated" if result.calibrated else "UNCALIBRATED"
-    cv2.rectangle(canvas, (8, 8), (min(width - 8, 900), 70), (0, 0, 0), -1)
+    if result.height_compensated:
+        calibration_text = "intrinsics + platform pose + height compensation"
+    elif result.calibrated:
+        calibration_text = "intrinsics only - NO HEIGHT COMPENSATION"
+    else:
+        calibration_text = "UNCALIBRATED"
+    cv2.rectangle(canvas, (8, 8), (min(width - 8, 1050), 70), (0, 0, 0), -1)
     cv2.putText(canvas, text, (18, 34), cv2.FONT_HERSHEY_SIMPLEX, 0.65, color, 2, cv2.LINE_AA)
     cv2.putText(
         canvas,
@@ -90,7 +92,7 @@ def draw_measurement_overlay(
         (18, 59),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.55,
-        (0, 180, 255) if not result.calibrated else (180, 255, 180),
+        (180, 255, 180) if result.height_compensated else (0, 180, 255),
         1,
         cv2.LINE_AA,
     )

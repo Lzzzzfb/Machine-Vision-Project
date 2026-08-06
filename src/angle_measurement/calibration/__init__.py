@@ -1,4 +1,16 @@
-from .model import CalibrationData
-from .service import calibrate_from_images, detect_checkerboard
+from .model import CalibrationData, PlatformPose
+from .service import (
+    CalibrationError,
+    calibrate_from_images,
+    detect_checkerboard,
+    estimate_platform_pose,
+)
 
-__all__ = ["CalibrationData", "calibrate_from_images", "detect_checkerboard"]
+__all__ = [
+    "CalibrationData",
+    "PlatformPose",
+    "CalibrationError",
+    "calibrate_from_images",
+    "detect_checkerboard",
+    "estimate_platform_pose",
+]

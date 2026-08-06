@@ -34,11 +34,40 @@ from angle_measurement.acquisition import Frame, ImageFileSource, MvsCameraSourc
 from angle_measurement.calibration.model import CalibrationData
 from angle_measurement.measurement.service import AngleMeasurementService
 from angle_measurement.models import EdgePolarity, MeasurementResult, RotatedRoi
-from angle_measurement.recipe import BandConfig, MeasurementRecipe, default_recipe
+from angle_measurement.recipe import (
+    BandConfig,
+    BrightBandConfig,
+    MeasurementRecipe,
+    default_recipe,
+)
 from angle_measurement.storage import ResultStorageError, ResultWriter
 
 from .roi_item import EditableRoiItem
 from .worker import CaptureMeasurementTask, MeasurementTask
+
+
+class ZoomableGraphicsView(QGraphicsView):
+    """Graphics view with mouse-wheel zoom and blank-area hand panning."""
+
+    def wheelEvent(self, event) -> None:  # noqa: ANN001
+        if self.scene() is None or self.scene().sceneRect().isEmpty():
+            super().wheelEvent(event)
+            return
+        factor = 1.2 if event.angleDelta().y() > 0 else 1.0 / 1.2
+        self.setTransformationAnchor(QGraphicsView.AnchorUnderMouse)
+        self.scale(factor, factor)
+        event.accept()
+
+    def fit_scene(self) -> None:
+        if self.scene() is not None and not self.scene().sceneRect().isEmpty():
+            self.fitInView(self.scene().sceneRect(), Qt.KeepAspectRatio)
+
+    def actual_pixels(self) -> None:
+        self.resetTransform()
+
+    def zoom_by(self, factor: float) -> None:
+        self.setTransformationAnchor(QGraphicsView.AnchorViewCenter)
+        self.scale(factor, factor)
 
 
 def array_to_qimage(image: np.ndarray) -> QImage:
@@ -87,10 +116,11 @@ class MainWindow(QMainWindow):
         self.continuous_timer.timeout.connect(self._continuous_tick)
 
         self.scene = QGraphicsScene(self)
-        self.view = QGraphicsView(self.scene)
+        self.view = ZoomableGraphicsView(self.scene)
         self.view.setRenderHints(self.view.renderHints())
         self.view.setDragMode(QGraphicsView.ScrollHandDrag)
         self.view.setBackgroundBrush(QColor(35, 38, 43))
+        self._displayed_image_size: tuple[int, int] | None = None
 
         splitter = QSplitter()
         splitter.addWidget(self.view)
@@ -146,6 +176,17 @@ class MainWindow(QMainWindow):
         camera_buttons.addWidget(connect_button)
         camera_buttons.addWidget(capture_button)
         source_form.addRow(camera_buttons)
+        view_buttons = QHBoxLayout()
+        for label, callback in (
+            ("适合窗口", self.view.fit_scene),
+            ("100%", self.view.actual_pixels),
+            ("放大", lambda: self.view.zoom_by(1.25)),
+            ("缩小", lambda: self.view.zoom_by(0.8)),
+        ):
+            button = QPushButton(label)
+            button.clicked.connect(callback)
+            view_buttons.addWidget(button)
+        source_form.addRow("图像视图", view_buttons)
         layout.addWidget(source_group)
 
         config_group = QGroupBox("配置与标定")
@@ -167,13 +208,26 @@ class MainWindow(QMainWindow):
         load_calibration = QPushButton("加载标定文件")
         load_calibration.clicked.connect(self.load_calibration)
         config_form.addRow(load_calibration)
+        self.pose_label = QLabel("缺少平台姿态")
+        self.pose_label.setStyleSheet("color: #ffb347")
+        config_form.addRow("平台姿态", self.pose_label)
+        self.height_spin = QDoubleSpinBox()
+        self.height_spin.setRange(-1.0, 1000.0)
+        self.height_spin.setDecimals(3)
+        self.height_spin.setSingleStep(0.1)
+        self.height_spin.setSpecialValueText("未设置")
+        self.height_spin.setSuffix(" mm")
+        self.height_spin.setValue(-1.0)
+        self.height_spin.valueChanged.connect(self._height_changed)
+        config_form.addRow("狭缝高度差", self.height_spin)
         layout.addWidget(config_group)
 
         roi_group = QGroupBox("测量带 ROI")
         roi_form = QFormLayout(roi_group)
         self.band_selector = QComboBox()
-        self.band_selector.addItem("狭缝边缘", "slit")
-        self.band_selector.addItem("平台边缘", "platform")
+        self.band_selector.addItem("亮狭缝中心线", "slit_center")
+        self.band_selector.addItem("平台长边 1", "platform_left")
+        self.band_selector.addItem("平台长边 2", "platform_right")
         self.band_selector.currentIndexChanged.connect(self._load_band_controls)
         roi_form.addRow("当前测量带", self.band_selector)
         self.roi_x = self._coordinate_spin()
@@ -188,12 +242,18 @@ class MainWindow(QMainWindow):
         self.polarity.addItem("自动", EdgePolarity.AUTO.value)
         self.polarity.addItem("暗到亮", EdgePolarity.DARK_TO_LIGHT.value)
         self.polarity.addItem("亮到暗", EdgePolarity.LIGHT_TO_DARK.value)
+        self.bright_min_contrast = self._size_spin(0, 255)
+        self.bright_min_width = self._size_spin(0.1, 1000)
+        self.bright_max_width = self._size_spin(0.2, 2000)
         roi_form.addRow("中心 X", self.roi_x)
         roi_form.addRow("中心 Y", self.roi_y)
         roi_form.addRow("长度", self.roi_length)
         roi_form.addRow("宽度", self.roi_width)
         roi_form.addRow("角度", self.roi_angle)
         roi_form.addRow("边缘极性", self.polarity)
+        roi_form.addRow("亮线最小对比度", self.bright_min_contrast)
+        roi_form.addRow("亮线最小宽度", self.bright_min_width)
+        roi_form.addRow("亮线最大宽度", self.bright_max_width)
         apply_roi = QPushButton("应用 ROI 参数")
         apply_roi.clicked.connect(self._apply_band_controls)
         roi_form.addRow(apply_roi)
@@ -209,7 +269,11 @@ class MainWindow(QMainWindow):
         measurement_form.addRow(self.continuous_check)
         self.angle_label = QLabel("--")
         self.angle_label.setStyleSheet("font-size: 24px; font-weight: 700")
-        measurement_form.addRow("夹角", self.angle_label)
+        measurement_form.addRow("补偿夹角", self.angle_label)
+        self.projected_angle_label = QLabel("--")
+        measurement_form.addRow("投影诊断角", self.projected_angle_label)
+        self.parallelism_label = QLabel("--")
+        measurement_form.addRow("平台双边平行度", self.parallelism_label)
         self.confidence_label = QLabel("--")
         measurement_form.addRow("置信度", self.confidence_label)
         self.quality_label = QLabel("等待测量")
@@ -219,7 +283,7 @@ class MainWindow(QMainWindow):
 
         output_group = QGroupBox("结果保存")
         output_form = QFormLayout(output_group)
-        self.auto_save = QCheckBox("自动保存原图、叠加图和 CSV")
+        self.auto_save = QCheckBox("自动保存原图、叠加图、CSV 和 JSON")
         output_form.addRow(self.auto_save)
         self.output_path = QLineEdit("data/output")
         output_form.addRow("目录", self.output_path)
@@ -253,25 +317,54 @@ class MainWindow(QMainWindow):
     def _current_band_name(self) -> str:
         return str(self.band_selector.currentData())
 
-    def _get_band(self, name: str) -> BandConfig:
-        return self.recipe.slit if name == "slit" else self.recipe.platform
+    def _get_band(self, name: str) -> BandConfig | BrightBandConfig:
+        return getattr(self.recipe, name)
 
-    def _set_band(self, name: str, band: BandConfig) -> None:
-        self.recipe = replace(self.recipe, **{name: band})
+    def _set_band(self, name: str, band: BandConfig | BrightBandConfig) -> None:
+        updates = {name: band}
+        if name == "platform_right":
+            updates["platform_right_confirmed"] = True
+        self.recipe = replace(self.recipe, **updates)
+
+    def _height_changed(self, value: float) -> None:
+        self.recipe = replace(
+            self.recipe,
+            height_difference_mm=None if value < 0 else float(value),
+        )
 
     def _load_band_controls(self) -> None:
         if not hasattr(self, "roi_x"):
             return
         band = self._get_band(self._current_band_name())
-        controls = [self.roi_x, self.roi_y, self.roi_length, self.roi_width, self.roi_angle]
+        controls = [
+            self.roi_x,
+            self.roi_y,
+            self.roi_length,
+            self.roi_width,
+            self.roi_angle,
+            self.polarity,
+            self.bright_min_contrast,
+            self.bright_min_width,
+            self.bright_max_width,
+        ]
         blockers = [QSignalBlocker(control) for control in controls]
         self.roi_x.setValue(band.roi.center_x)
         self.roi_y.setValue(band.roi.center_y)
         self.roi_length.setValue(band.roi.length)
         self.roi_width.setValue(band.roi.width)
         self.roi_angle.setValue(band.roi.angle_deg)
-        index = self.polarity.findData(band.edge.polarity.value)
-        self.polarity.setCurrentIndex(max(index, 0))
+        is_bright = isinstance(band, BrightBandConfig)
+        self.polarity.setEnabled(not is_bright)
+        self.bright_min_contrast.setEnabled(is_bright)
+        self.bright_min_width.setEnabled(is_bright)
+        self.bright_max_width.setEnabled(is_bright)
+        if is_bright:
+            self.bright_min_contrast.setValue(band.bright.min_contrast)
+            self.bright_min_width.setValue(band.bright.min_width_px)
+            self.bright_max_width.setValue(band.bright.max_width_px)
+        else:
+            index = self.polarity.findData(band.edge.polarity.value)
+            self.polarity.setCurrentIndex(max(index, 0))
         del blockers
 
     def _apply_band_controls(self) -> None:
@@ -284,8 +377,21 @@ class MainWindow(QMainWindow):
             self.roi_width.value(),
             self.roi_angle.value(),
         )
-        edge = replace(band.edge, polarity=EdgePolarity(self.polarity.currentData()))
-        self._set_band(name, replace(band, roi=roi, edge=edge))
+        if isinstance(band, BrightBandConfig):
+            if self.bright_max_width.value() <= self.bright_min_width.value():
+                self._error("亮线最大宽度必须大于最小宽度")
+                return
+            bright = replace(
+                band.bright,
+                min_contrast=self.bright_min_contrast.value(),
+                min_width_px=self.bright_min_width.value(),
+                max_width_px=self.bright_max_width.value(),
+            )
+            updated = replace(band, roi=roi, bright=bright)
+        else:
+            edge = replace(band.edge, polarity=EdgePolarity(self.polarity.currentData()))
+            updated = replace(band, roi=roi, edge=edge)
+        self._set_band(name, updated)
         if name in self._roi_items:
             self._roi_items[name].set_roi(roi)
         self.statusBar().showMessage("ROI 已更新；请保存配方")
@@ -297,6 +403,10 @@ class MainWindow(QMainWindow):
             self._load_band_controls()
 
     def _display(self, image: np.ndarray) -> None:
+        image_size = (int(image.shape[1]), int(image.shape[0]))
+        preserve_view = self._displayed_image_size == image_size
+        old_transform = self.view.transform()
+        old_center = self.view.mapToScene(self.view.viewport().rect().center())
         self.scene.clear()
         pixmap = QPixmap.fromImage(array_to_qimage(image))
         item = QGraphicsPixmapItem(pixmap)
@@ -305,14 +415,20 @@ class MainWindow(QMainWindow):
         self.scene.setSceneRect(0, 0, pixmap.width(), pixmap.height())
         self._roi_items = {}
         for name, band, color in (
-            ("slit", self.recipe.slit, QColor(255, 150, 0)),
-            ("platform", self.recipe.platform, QColor(0, 210, 255)),
+            ("slit_center", self.recipe.slit_center, QColor(255, 150, 0)),
+            ("platform_left", self.recipe.platform_left, QColor(0, 210, 255)),
+            ("platform_right", self.recipe.platform_right, QColor(200, 80, 220)),
         ):
             roi_item = EditableRoiItem(name, band.roi, color)
             roi_item.roi_changed.connect(self._roi_item_changed)
             self.scene.addItem(roi_item)
             self._roi_items[name] = roi_item
-        self.view.fitInView(self.scene.sceneRect(), Qt.KeepAspectRatio)
+        self._displayed_image_size = image_size
+        if preserve_view:
+            self.view.setTransform(old_transform)
+            self.view.centerOn(old_center)
+        else:
+            self.view.fit_scene()
 
     def open_image(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
@@ -349,9 +465,16 @@ class MainWindow(QMainWindow):
             return
         self._recipe_explicitly_loaded = True
         self.recipe_path.setText(path)
+        blocker = QSignalBlocker(self.height_spin)
+        self.height_spin.setValue(
+            -1.0 if self.recipe.height_difference_mm is None else self.recipe.height_difference_mm
+        )
+        del blocker
         self._load_band_controls()
         if self.current_frame is not None:
             self._display(self.current_frame.image)
+        if not self.recipe.platform_right_confirmed:
+            self.statusBar().showMessage("旧配方已迁移：请重新放置并应用平台长边 2 ROI")
 
     def save_recipe(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
@@ -383,6 +506,14 @@ class MainWindow(QMainWindow):
             f"已标定 · RMS {self.calibration.rms_reprojection_error:.3f} px"
         )
         self.calibration_label.setStyleSheet("color: #66d17a")
+        if self.calibration.platform_pose is None:
+            self.pose_label.setText("缺少平台姿态")
+            self.pose_label.setStyleSheet("color: #ffb347")
+        else:
+            self.pose_label.setText(
+                f"已标定 · RMS {self.calibration.platform_pose.reprojection_error_px:.3f} px"
+            )
+            self.pose_label.setStyleSheet("color: #66d17a")
 
     def connect_camera(self) -> None:
         if self.camera_source is not None:
@@ -436,11 +567,19 @@ class MainWindow(QMainWindow):
         self._busy = False
         self.current_frame = frame
         self._display(overlay)
-        if result.valid:
+        self.projected_angle_label.setText(
+            "--" if result.projected_angle_deg is None else f"{result.projected_angle_deg:.4f}°"
+        )
+        self.parallelism_label.setText(
+            "--"
+            if result.platform_parallelism_deg is None
+            else f"{result.platform_parallelism_deg:.4f}°"
+        )
+        if result.valid and result.angle_deg is not None:
             self.angle_label.setText(f"{result.angle_deg:.4f}°")
             self.confidence_label.setText(f"{result.confidence:.3f}")
-            calibration = "已标定" if result.calibrated else "未标定"
-            self.quality_label.setText(f"有效 · {calibration}")
+            mode = "双平面高度补偿" if result.height_compensated else "仅投影调试"
+            self.quality_label.setText(f"有效 · {mode}")
             self.quality_label.setStyleSheet("color: #66d17a")
         else:
             self.angle_label.setText("--")

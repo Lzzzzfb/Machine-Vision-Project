@@ -11,6 +11,67 @@ import numpy as np
 
 
 @dataclass
+class PlatformPose:
+    """World-to-camera pose of the checkerboard plane coincident with the platform."""
+
+    rotation_vector: np.ndarray
+    translation_vector: np.ndarray
+    reprojection_error_px: float
+    reference_image: str = ""
+    created_at: str = field(
+        default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
+
+    def __post_init__(self) -> None:
+        self.rotation_vector = np.asarray(self.rotation_vector, dtype=np.float64).reshape(3)
+        self.translation_vector = np.asarray(self.translation_vector, dtype=np.float64).reshape(3)
+        if not np.all(np.isfinite(self.rotation_vector)) or not np.all(
+            np.isfinite(self.translation_vector)
+        ):
+            raise ValueError("Platform pose must contain finite values")
+        if self.reprojection_error_px < 0:
+            raise ValueError("Pose reprojection error cannot be negative")
+
+    @property
+    def rotation_matrix(self) -> np.ndarray:
+        matrix, _ = cv2.Rodrigues(self.rotation_vector)
+        return matrix
+
+    @property
+    def camera_center_world(self) -> np.ndarray:
+        rotation = self.rotation_matrix
+        return -rotation.T @ self.translation_vector
+
+    @property
+    def platform_normal_toward_camera(self) -> np.ndarray:
+        normal = np.array([0.0, 0.0, 1.0], dtype=np.float64)
+        if float(np.dot(normal, self.camera_center_world)) < 0:
+            normal = -normal
+        return normal
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "rotation_vector": self.rotation_vector.tolist(),
+            "translation_vector": self.translation_vector.tolist(),
+            "reprojection_error_px": float(self.reprojection_error_px),
+            "reference_image": self.reference_image,
+            "created_at": self.created_at,
+            "world_to_camera_convention": "Xc = R Xw + t",
+            "platform_plane_z_mm": 0.0,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> "PlatformPose":
+        return cls(
+            rotation_vector=np.asarray(data["rotation_vector"], dtype=np.float64),
+            translation_vector=np.asarray(data["translation_vector"], dtype=np.float64),
+            reprojection_error_px=float(data["reprojection_error_px"]),
+            reference_image=str(data.get("reference_image", "")),
+            created_at=str(data.get("created_at", "unknown")),
+        )
+
+
+@dataclass
 class CalibrationData:
     camera_matrix: np.ndarray
     distortion_coefficients: np.ndarray
@@ -20,6 +81,7 @@ class CalibrationData:
     inner_corners: tuple[int, int] = (9, 6)
     per_view_errors: list[float] = field(default_factory=list)
     source_images: list[str] = field(default_factory=list)
+    platform_pose: PlatformPose | None = None
     created_at: str = field(
         default_factory=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
@@ -57,7 +119,7 @@ class CalibrationData:
 
     def to_dict(self) -> dict[str, Any]:
         return {
-            "version": 1,
+            "version": 2,
             "created_at": self.created_at,
             "camera_matrix": self.camera_matrix.tolist(),
             "distortion_coefficients": self.distortion_coefficients.tolist(),
@@ -67,6 +129,7 @@ class CalibrationData:
             "inner_corners": list(self.inner_corners),
             "per_view_errors": [float(value) for value in self.per_view_errors],
             "source_images": list(self.source_images),
+            "platform_pose": self.platform_pose.to_dict() if self.platform_pose else None,
         }
 
     def save(self, path: str | Path) -> Path:
@@ -80,8 +143,10 @@ class CalibrationData:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> "CalibrationData":
-        if int(data.get("version", 1)) != 1:
+        version = int(data.get("version", 1))
+        if version not in (1, 2):
             raise ValueError("Unsupported calibration file version")
+        pose_data = data.get("platform_pose") if version >= 2 else None
         return cls(
             camera_matrix=np.asarray(data["camera_matrix"], dtype=np.float64),
             distortion_coefficients=np.asarray(
@@ -93,6 +158,7 @@ class CalibrationData:
             inner_corners=tuple(data.get("inner_corners", (9, 6))),
             per_view_errors=[float(value) for value in data.get("per_view_errors", [])],
             source_images=[str(value) for value in data.get("source_images", [])],
+            platform_pose=PlatformPose.from_dict(pose_data) if pose_data else None,
             created_at=str(data.get("created_at", "unknown")),
         )
 

@@ -13,7 +13,7 @@ from .storage import ResultStorageError, ResultWriter
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description="测量狭缝边缘与平台边缘的二维较小夹角")
+    parser = argparse.ArgumentParser(description="测量亮狭缝中心线与平台双边平均方向的较小夹角")
     parser.add_argument("input", type=Path, help="图片文件或图片目录")
     parser.add_argument("--recipe", type=Path, required=True, help="测量配方 JSON")
     parser.add_argument("--calibration", type=Path, help="相机标定 JSON")

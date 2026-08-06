@@ -1,13 +1,35 @@
 {
-  "version": 1,
-  "name": "MV-CS050-10UC-example",
-  "slit": {
-    "name": "slit_edge",
+  "version": 2,
+  "name": "MV-CS050-10UC-bright-slit-example",
+  "slit_center": {
+    "name": "slit_center",
     "roi": {
       "center_x": 1224.0,
-      "center_y": 820.0,
-      "length": 1100.0,
-      "width": 120.0,
+      "center_y": 778.24,
+      "length": 385.56,
+      "width": 102.4,
+      "angle_deg": 0.0
+    },
+    "bright": {
+      "scan_step_px": 3.0,
+      "profile_step_px": 0.25,
+      "gaussian_sigma": 1.0,
+      "min_gradient": 6.0,
+      "min_contrast": 12.0,
+      "min_width_px": 1.0,
+      "max_width_px": 30.0,
+      "center_bias": 0.15,
+      "min_edge_symmetry": 0.25,
+      "max_direction_deviation_deg": 15.0
+    }
+  },
+  "platform_left": {
+    "name": "platform_left",
+    "roi": {
+      "center_x": 1224.0,
+      "center_y": 1310.72,
+      "length": 856.8,
+      "width": 81.92,
       "angle_deg": 0.0
     },
     "edge": {
@@ -20,14 +42,14 @@
       "max_direction_deviation_deg": 15.0
     }
   },
-  "platform": {
-    "name": "platform_edge",
+  "platform_right": {
+    "name": "platform_right",
     "roi": {
       "center_x": 1224.0,
-      "center_y": 1270.0,
-      "length": 1100.0,
-      "width": 120.0,
-      "angle_deg": 10.0
+      "center_y": 1556.48,
+      "length": 856.8,
+      "width": 81.92,
+      "angle_deg": 0.0
     },
     "edge": {
       "polarity": "auto",
@@ -39,6 +61,9 @@
       "max_direction_deviation_deg": 15.0
     }
   },
+  "height_difference_mm": null,
+  "require_height_compensation": true,
+  "platform_right_confirmed": true,
   "line_fit": {
     "ransac_threshold_px": 0.8,
     "ransac_iterations": 300,
@@ -50,7 +75,11 @@
   },
   "quality": {
     "min_image_stddev": 3.0,
-    "max_saturated_fraction": 0.95
+    "max_saturated_fraction": 0.95,
+    "max_platform_parallelism_deg": 1.0,
+    "min_platform_edge_separation_px": 20.0,
+    "max_intrinsic_rms_px": 0.5,
+    "max_pose_rms_px": 0.5
   },
   "calibration_file": null
 }

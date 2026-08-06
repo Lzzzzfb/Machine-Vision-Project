@@ -1,32 +1,35 @@
 {
-  "version": 1,
+  "version": 2,
   "name": "synthetic-demo-20deg",
-  "slit": {
-    "name": "slit_edge",
+  "slit_center": {
+    "name": "slit_center",
     "roi": {
       "center_x": 400,
-      "center_y": 220,
-      "length": 520,
-      "width": 55,
+      "center_y": 160,
+      "length": 360,
+      "width": 40,
       "angle_deg": 0.0
     },
-    "edge": {
-      "polarity": "dark_to_light",
+    "bright": {
       "scan_step_px": 3.0,
       "profile_step_px": 0.25,
       "gaussian_sigma": 1.0,
-      "min_gradient": 8.0,
+      "min_gradient": 6.0,
+      "min_contrast": 12.0,
+      "min_width_px": 3,
+      "max_width_px": 10,
       "center_bias": 0.15,
+      "min_edge_symmetry": 0.25,
       "max_direction_deviation_deg": 15.0
     }
   },
-  "platform": {
-    "name": "platform_edge",
+  "platform_left": {
+    "name": "platform_left",
     "roi": {
-      "center_x": 400,
-      "center_y": 410,
-      "length": 460,
-      "width": 55,
+      "center_x": 380,
+      "center_y": 390,
+      "length": 400,
+      "width": 36,
       "angle_deg": 20.0
     },
     "edge": {
@@ -39,6 +42,28 @@
       "max_direction_deviation_deg": 15.0
     }
   },
+  "platform_right": {
+    "name": "platform_right",
+    "roi": {
+      "center_x": 340,
+      "center_y": 500,
+      "length": 400,
+      "width": 36,
+      "angle_deg": 20.0
+    },
+    "edge": {
+      "polarity": "dark_to_light",
+      "scan_step_px": 3.0,
+      "profile_step_px": 0.25,
+      "gaussian_sigma": 1.0,
+      "min_gradient": 8.0,
+      "center_bias": 0.15,
+      "max_direction_deviation_deg": 15.0
+    }
+  },
+  "height_difference_mm": null,
+  "require_height_compensation": false,
+  "platform_right_confirmed": true,
   "line_fit": {
     "ransac_threshold_px": 0.8,
     "ransac_iterations": 300,
@@ -50,7 +75,11 @@
   },
   "quality": {
     "min_image_stddev": 3.0,
-    "max_saturated_fraction": 0.95
+    "max_saturated_fraction": 0.95,
+    "max_platform_parallelism_deg": 1.0,
+    "min_platform_edge_separation_px": 20.0,
+    "max_intrinsic_rms_px": 0.5,
+    "max_pose_rms_px": 0.5
   },
   "calibration_file": null
 }

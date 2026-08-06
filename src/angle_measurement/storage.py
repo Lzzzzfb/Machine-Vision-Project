@@ -39,6 +39,9 @@ class ResultWriter:
         "valid",
         "calibrated",
         "angle_deg",
+        "projected_angle_deg",
+        "height_compensated",
+        "platform_parallelism_deg",
         "confidence",
         "failure_reasons",
         "slit_rms_px",
@@ -47,8 +50,14 @@ class ResultWriter:
         "platform_rms_px",
         "platform_inlier_ratio",
         "platform_span_px",
+        "platform_left_rms_px",
+        "platform_left_inlier_ratio",
+        "platform_right_rms_px",
+        "platform_right_inlier_ratio",
+        "slit_mean_width_px",
         "raw_image",
         "overlay_image",
+        "result_json",
         "metadata_json",
     ]
 
@@ -71,8 +80,23 @@ class ResultWriter:
         safe_id = "".join(character if character.isalnum() or character in "-_" else "_" for character in frame_id)
         raw_path = folder / f"{safe_id}-raw.png"
         overlay_path = folder / f"{safe_id}-result.png"
+        result_path = folder / f"{safe_id}-result.json"
         write_image_unicode(raw_path, image)
         write_image_unicode(overlay_path, overlay)
+        result_payload = result.to_dict()
+        result_payload["frame_id"] = frame_id
+        result_payload["source_name"] = source_name
+        result_payload["recipe_name"] = recipe_name
+        result_payload["timestamp"] = timestamp
+        result_payload["metadata"] = metadata or {}
+        try:
+            result_path.write_text(
+                json.dumps(result_payload, ensure_ascii=False, indent=2, default=_json_default)
+                + "\n",
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            raise ResultStorageError(f"JSON 保存失败: {result_path}: {exc}") from exc
         csv_path = folder / "measurements.csv"
         row = {
             "timestamp": timestamp,
@@ -82,6 +106,13 @@ class ResultWriter:
             "valid": result.valid,
             "calibrated": result.calibrated,
             "angle_deg": "" if result.angle_deg is None else f"{result.angle_deg:.8f}",
+            "projected_angle_deg": ""
+            if result.projected_angle_deg is None
+            else f"{result.projected_angle_deg:.8f}",
+            "height_compensated": result.height_compensated,
+            "platform_parallelism_deg": ""
+            if result.platform_parallelism_deg is None
+            else f"{result.platform_parallelism_deg:.8f}",
             "confidence": f"{result.confidence:.6f}",
             "failure_reasons": " | ".join(result.failure_reasons),
             "slit_rms_px": "" if result.line_slit is None else f"{result.line_slit.rms_px:.6f}",
@@ -90,9 +121,25 @@ class ResultWriter:
             "platform_rms_px": "" if result.line_platform is None else f"{result.line_platform.rms_px:.6f}",
             "platform_inlier_ratio": "" if result.line_platform is None else f"{result.line_platform.inlier_ratio:.6f}",
             "platform_span_px": "" if result.line_platform is None else f"{result.line_platform.span_px:.3f}",
+            "platform_left_rms_px": ""
+            if result.line_platform_left is None
+            else f"{result.line_platform_left.rms_px:.6f}",
+            "platform_left_inlier_ratio": ""
+            if result.line_platform_left is None
+            else f"{result.line_platform_left.inlier_ratio:.6f}",
+            "platform_right_rms_px": ""
+            if result.line_platform_right is None
+            else f"{result.line_platform_right.rms_px:.6f}",
+            "platform_right_inlier_ratio": ""
+            if result.line_platform_right is None
+            else f"{result.line_platform_right.inlier_ratio:.6f}",
+            "slit_mean_width_px": result.diagnostics.get("slit_mean_width_px", ""),
             "raw_image": str(raw_path.relative_to(self.root)),
             "overlay_image": str(overlay_path.relative_to(self.root)),
-            "metadata_json": json.dumps(metadata or {}, ensure_ascii=False, separators=(",", ":")),
+            "result_json": str(result_path.relative_to(self.root)),
+            "metadata_json": json.dumps(
+                metadata or {}, ensure_ascii=False, separators=(",", ":"), default=_json_default
+            ),
         }
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         new_file = not csv_path.exists()
@@ -107,5 +154,14 @@ class ResultWriter:
         return {
             "raw_image": str(raw_path),
             "overlay_image": str(overlay_path),
+            "result_json": str(result_path),
             "csv": str(csv_path),
         }
+
+
+def _json_default(value: Any) -> Any:
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, np.generic):
+        return value.item()
+    raise TypeError(f"Object of type {type(value).__name__} is not JSON serializable")
