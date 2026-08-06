@@ -1,0 +1,90 @@
+{
+  "version": 2,
+  "name": "MV-CS050-10UC-bright-slit-example",
+  "slit_center": {
+    "name": "slit_center",
+    "roi": {
+      "center_x": 1097.02,
+      "center_y": 1135.56,
+      "length": 220.0,
+      "width": 15.0,
+      "angle_deg": 0.0
+    },
+    "bright": {
+      "scan_step_px": 3.0,
+      "profile_step_px": 0.25,
+      "gaussian_sigma": 1.0,
+      "min_gradient": 6.0,
+      "min_contrast": 12.0,
+      "min_width_px": 1.0,
+      "max_width_px": 30.0,
+      "center_bias": 0.15,
+      "min_edge_symmetry": 0.25,
+      "max_direction_deviation_deg": 15.0
+    }
+  },
+  "platform_left": {
+    "name": "platform_left",
+    "roi": {
+      "center_x": 1096.8634662867998,
+      "center_y": 876.8360968660969,
+      "length": 856.8,
+      "width": 30.0,
+      "angle_deg": 0.0
+    },
+    "edge": {
+      "polarity": "auto",
+      "scan_step_px": 3.0,
+      "profile_step_px": 0.25,
+      "gaussian_sigma": 1.0,
+      "min_gradient": 8.0,
+      "center_bias": 0.15,
+      "max_direction_deviation_deg": 15.0
+    }
+  },
+  "platform_right": {
+    "name": "platform_right",
+    "roi": {
+      "center_x": 1096.8595536562202,
+      "center_y": 1370.8178347578346,
+      "length": 850.0,
+      "width": 30.0,
+      "angle_deg": 0.0
+    },
+    "edge": {
+      "polarity": "auto",
+      "scan_step_px": 3.0,
+      "profile_step_px": 0.25,
+      "gaussian_sigma": 1.0,
+      "min_gradient": 8.0,
+      "center_bias": 0.15,
+      "max_direction_deviation_deg": 15.0
+    }
+  },
+  "height_difference_mm": 21.0,
+  "require_height_compensation": true,
+  "platform_right_confirmed": true,
+  "line_fit": {
+    "ransac_threshold_px": 0.8,
+    "ransac_iterations": 300,
+    "min_points": 12,
+    "min_inlier_ratio": 0.65,
+    "min_span_px": 30.0,
+    "max_rms_px": 0.8,
+    "random_seed": 20260805
+  },
+  "quality": {
+    "min_image_stddev": 3.0,
+    "max_saturated_fraction": 0.95,
+    "max_platform_parallelism_deg": 1.0,
+    "min_platform_edge_separation_px": 20.0,
+    "max_intrinsic_rms_px": 0.5,
+    "max_pose_rms_px": 0.5,
+    "stability_window_size": 10,
+    "stability_std_max_deg": 0.1,
+    "max_platform_blur_width_px": 8.0,
+    "max_slit_edge_blur_width_px": 8.0,
+    "min_focus_valid_fraction": 0.5
+  },
+  "calibration_file": null
+}
