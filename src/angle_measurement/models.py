@@ -150,6 +150,11 @@ class QualityConfig:
     min_platform_edge_separation_px: float = 20.0
     max_intrinsic_rms_px: float = 0.5
     max_pose_rms_px: float = 0.5
+    stability_window_size: int = 10
+    stability_std_max_deg: float = 0.1
+    max_platform_blur_width_px: float = 8.0
+    max_slit_edge_blur_width_px: float = 8.0
+    min_focus_valid_fraction: float = 0.5
 
     def __post_init__(self) -> None:
         if self.min_image_stddev < 0:
@@ -162,6 +167,14 @@ class QualityConfig:
             raise ValueError("min_platform_edge_separation_px must be positive")
         if self.max_intrinsic_rms_px <= 0 or self.max_pose_rms_px <= 0:
             raise ValueError("Calibration RMS thresholds must be positive")
+        if self.stability_window_size < 2:
+            raise ValueError("stability_window_size must be at least 2")
+        if self.stability_std_max_deg <= 0:
+            raise ValueError("stability_std_max_deg must be positive")
+        if self.max_platform_blur_width_px <= 0 or self.max_slit_edge_blur_width_px <= 0:
+            raise ValueError("Focus blur thresholds must be positive")
+        if not 0 < self.min_focus_valid_fraction <= 1:
+            raise ValueError("min_focus_valid_fraction must be in (0, 1]")
 
 
 @dataclass
@@ -169,6 +182,7 @@ class EdgePointSet:
     points: np.ndarray
     strengths: np.ndarray
     attempted_profiles: int
+    blur_widths_px: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
 
     @property
     def count(self) -> int:
@@ -179,6 +193,9 @@ class EdgePointSet:
 class BrightLinePointSet(EdgePointSet):
     widths_px: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
     contrasts: np.ndarray = field(default_factory=lambda: np.empty(0, dtype=np.float64))
+    edge_blur_widths_px: np.ndarray = field(
+        default_factory=lambda: np.empty(0, dtype=np.float64)
+    )
 
 
 @dataclass

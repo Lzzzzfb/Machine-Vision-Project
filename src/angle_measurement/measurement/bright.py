@@ -9,18 +9,7 @@ from angle_measurement.models import (
     RotatedRoi,
 )
 
-from .edge import EdgeExtractionError, roi_is_inside_image, to_gray_u8
-
-
-def _subpixel_peak(values: np.ndarray, index: int) -> float:
-    if index <= 0 or index >= len(values) - 1:
-        return float(index)
-    left, center, right = map(float, values[index - 1 : index + 2])
-    denominator = left - 2.0 * center + right
-    if abs(denominator) < 1e-12:
-        return float(index)
-    offset = 0.5 * (left - right) / denominator
-    return float(index) + float(np.clip(offset, -1.0, 1.0))
+from .edge import EdgeExtractionError, localize_gradient_peak, roi_is_inside_image, to_gray_u8
 
 
 def extract_bright_line_points(
@@ -75,6 +64,7 @@ def extract_bright_line_points(
     strengths: list[float] = []
     widths: list[float] = []
     contrasts: list[float] = []
+    edge_blur_widths: list[float] = []
 
     for row_index, (profile, gradient) in enumerate(zip(profiles, gradients, strict=True)):
         peak_score = profile * centre_weight
@@ -101,16 +91,22 @@ def extract_bright_line_points(
         ):
             continue
 
+        left_peak, left_blur_width = localize_gradient_peak(
+            left_score, left_index, config.profile_step_px
+        )
+        right_peak, right_blur_width = localize_gradient_peak(
+            right_score, right_index, config.profile_step_px
+        )
         left_position = float(
             np.interp(
-                _subpixel_peak(left_score, left_index),
+                left_peak,
                 np.arange(profile_count, dtype=np.float64),
                 across,
             )
         )
         right_position = float(
             np.interp(
-                _subpixel_peak(right_score, right_index),
+                right_peak,
                 np.arange(profile_count, dtype=np.float64),
                 across,
             )
@@ -133,6 +129,7 @@ def extract_bright_line_points(
         strengths.append(min(left_strength, right_strength))
         widths.append(width_px)
         contrasts.append(contrast)
+        edge_blur_widths.append(0.5 * (left_blur_width + right_blur_width))
 
     return BrightLinePointSet(
         points=np.asarray(points, dtype=np.float64).reshape(-1, 2),
@@ -140,4 +137,5 @@ def extract_bright_line_points(
         attempted_profiles=scan_count,
         widths_px=np.asarray(widths, dtype=np.float64),
         contrasts=np.asarray(contrasts, dtype=np.float64),
+        edge_blur_widths_px=np.asarray(edge_blur_widths, dtype=np.float64),
     )

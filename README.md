@@ -12,6 +12,7 @@
 - [标定指南](docs/guides/calibration.md)
 - [MVS SDK 配置](docs/guides/mvs-sdk-setup.md)
 - [操作指南](docs/guides/operator-guide.md)
+- [双视图实时测量与成像优化规格](docs/superpowers/specs/2026-08-06-dual-view-realtime-ui-optics-design.md)
 - [MVS 实机采集验收](docs/validation/2026-08-05-mvs-hardware-validation.md)
 
 ## 安装与启动
@@ -52,9 +53,10 @@ angle-measure examples/synthetic-20deg.png --recipe configs/synthetic-demo.json 
 - `height_compensated`：是否实际执行了平台姿态和高度补偿。
 - `confidence`：综合亮线、双边、点数、跨度、内点率和残差的置信度。
 - `failure_reasons`：中文结构化失败原因。
+- `diagnostics.*_focus`：三个 ROI 的有效剖面比例、边缘扩散宽度和清晰度状态。
 
-自动保存会按日期生成原图、叠加图、逐帧 JSON 和汇总 CSV。
+实时模式不会逐帧自动保存。点击“保存当前结果”会按日期生成一次原图、叠加图、逐帧 JSON 和汇总 CSV，并写入当前稳定性、清晰度、曝光、增益和刷新率。
 
 ## 当前硬件状态
 
-MVS 4.5.1、MV-CS050-10UC 枚举、Mono 8、软件触发、单帧取流以及两轮连续 500 帧均已验证。正式零件照片已确认；下一步是使用工业相机采集俯视原图，调整景深、照明和三个 ROI。
+MVS 4.5.1、MV-CS050-10UC 枚举、Mono 8、软件触发、单帧取流以及两轮连续 500 帧均已验证。界面支持纯净原图/测量结果双视图、最新帧实时测量、三 ROI 清晰度诊断和 10 次稳定性统计。正式实机下一步按操作指南改为 F8、抬高 50～100 mm、在两层之间对焦并重新标定。

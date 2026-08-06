@@ -15,6 +15,10 @@ from angle_measurement.models import RotatedRoi
 
 class EditableRoiItem(QGraphicsObject):
     roi_changed = Signal(str, object)
+    roi_selected = Signal(str)
+    drag_started = Signal(str)
+    roi_moved = Signal(str, object)
+    drag_finished = Signal(str, object)
 
     def __init__(self, name: str, roi: RotatedRoi, color: QColor) -> None:
         super().__init__()
@@ -22,6 +26,8 @@ class EditableRoiItem(QGraphicsObject):
         self._length = roi.length
         self._width = roi.width
         self._color = color
+        self._dragging = False
+        self._updating = False
         self.setPos(roi.center_x, roi.center_y)
         self.setRotation(roi.angle_deg)
         self.setFlags(
@@ -63,12 +69,14 @@ class EditableRoiItem(QGraphicsObject):
         )
 
     def set_roi(self, roi: RotatedRoi) -> None:
+        self._updating = True
         self.prepareGeometryChange()
         self._length = roi.length
         self._width = roi.width
         self.setPos(roi.center_x, roi.center_y)
         self.setRotation(roi.angle_deg)
         self.update()
+        self._updating = False
 
     def to_roi(self) -> RotatedRoi:
         return RotatedRoi(
@@ -79,6 +87,32 @@ class EditableRoiItem(QGraphicsObject):
             angle_deg=self.rotation(),
         )
 
+    def itemChange(self, change, value):  # noqa: ANN001, ANN201
+        result = super().itemChange(change, value)
+        if (
+            change == QGraphicsItem.ItemSelectedHasChanged
+            and bool(value)
+            and not self._updating
+        ):
+            self.roi_selected.emit(self.name)
+        if (
+            change == QGraphicsItem.ItemPositionHasChanged
+            and self._dragging
+            and not self._updating
+        ):
+            self.roi_moved.emit(self.name, self.to_roi())
+        return result
+
+    def mousePressEvent(self, event) -> None:  # noqa: ANN001
+        self._dragging = True
+        self.setSelected(True)
+        self.roi_selected.emit(self.name)
+        self.drag_started.emit(self.name)
+        super().mousePressEvent(event)
+
     def mouseReleaseEvent(self, event) -> None:  # noqa: ANN001
         super().mouseReleaseEvent(event)
-        self.roi_changed.emit(self.name, self.to_roi())
+        roi = self.to_roi()
+        self._dragging = False
+        self.roi_changed.emit(self.name, roi)
+        self.drag_finished.emit(self.name, roi)

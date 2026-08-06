@@ -9,6 +9,7 @@ from angle_measurement.models import (
     EdgeExtractionConfig,
     EdgePolarity,
     RotatedRoi,
+    QualityConfig,
 )
 from angle_measurement.recipe import BandConfig, BrightBandConfig, MeasurementRecipe
 
@@ -121,6 +122,42 @@ def test_blank_image_is_invalid_without_angle():
     assert not result.valid
     assert result.angle_deg is None
     assert result.failure_reasons
+
+
+def test_severely_blurred_platform_edges_are_rejected():
+    image = np.full((480, 640), 120, dtype=np.uint8)
+    slit = RotatedRoi(320, 100, 280, 36, 0)
+    left = RotatedRoi(320, 280, 300, 40, 0)
+    right = RotatedRoi(320, 390, 300, 40, 0)
+    _paint_bright_slit(image, slit)
+    _paint_boundary(image, left)
+    _paint_boundary(image, right)
+    image = cv2.GaussianBlur(image, (0, 0), 5.0)
+    edge = EdgeExtractionConfig(
+        polarity=EdgePolarity.DARK_TO_LIGHT,
+        min_gradient=3,
+    )
+    recipe = MeasurementRecipe(
+        "blurred",
+        BrightBandConfig(
+            "slit_center",
+            slit,
+            BrightLineExtractionConfig(
+                min_gradient=3, min_contrast=10, min_width_px=2, max_width_px=20
+            ),
+        ),
+        BandConfig("platform_left", left, edge),
+        BandConfig("platform_right", right, edge),
+        quality=QualityConfig(
+            max_platform_blur_width_px=7.0,
+            max_slit_edge_blur_width_px=14.0,
+        ),
+        require_height_compensation=False,
+    )
+    result = AngleMeasurementService(recipe).measure(image)
+    assert not result.valid
+    assert "平台左边缘清晰度不足" in result.failure_reasons
+    assert "平台右边缘清晰度不足" in result.failure_reasons
 
 
 def test_dual_plane_compensation_recovers_world_angle_under_perspective():

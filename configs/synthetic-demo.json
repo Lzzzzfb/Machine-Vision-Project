@@ -79,7 +79,12 @@
     "max_platform_parallelism_deg": 1.0,
     "min_platform_edge_separation_px": 20.0,
     "max_intrinsic_rms_px": 0.5,
-    "max_pose_rms_px": 0.5
+    "max_pose_rms_px": 0.5,
+    "stability_window_size": 10,
+    "stability_std_max_deg": 0.1,
+    "max_platform_blur_width_px": 8.0,
+    "max_slit_edge_blur_width_px": 8.0,
+    "min_focus_valid_fraction": 0.5
   },
   "calibration_file": null
 }

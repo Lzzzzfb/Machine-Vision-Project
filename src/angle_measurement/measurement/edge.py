@@ -56,6 +56,40 @@ def _parabolic_peak(values: np.ndarray, index: int) -> float:
     return float(index) + float(np.clip(offset, -1.0, 1.0))
 
 
+def localize_gradient_peak(
+    values: np.ndarray,
+    index: int,
+    profile_step_px: float,
+    max_radius_px: float = 12.0,
+) -> tuple[float, float]:
+    """Return a symmetric line-spread centroid and its Gaussian-equivalent FWHM."""
+
+    values = np.asarray(values, dtype=np.float64)
+    peak = float(values[index])
+    if not np.isfinite(peak) or peak <= 0:
+        return float(index), float("inf")
+    threshold = peak * 0.02
+    max_samples = max(2, int(np.ceil(max_radius_px / profile_step_px)))
+    left = index
+    while left > 0 and index - left < max_samples and values[left - 1] > threshold:
+        left -= 1
+    right = index
+    while right < len(values) - 1 and right - index < max_samples and values[right + 1] > threshold:
+        right += 1
+    left = max(0, left - 1)
+    right = min(len(values) - 1, right + 1)
+    indices = np.arange(left, right + 1, dtype=np.float64)
+    local = np.where(np.isfinite(values[left : right + 1]), values[left : right + 1], 0.0)
+    weights = np.clip(local, 0.0, None)
+    total = float(np.sum(weights))
+    if total <= 1e-12:
+        return _parabolic_peak(values, index), float("inf")
+    centre = float(np.sum(indices * weights) / total)
+    variance_samples = float(np.sum(np.square(indices - centre) * weights) / total)
+    fwhm_px = 2.354820045 * np.sqrt(max(variance_samples, 0.0)) * profile_step_px
+    return centre, float(fwhm_px)
+
+
 def extract_edge_points(
     image: np.ndarray,
     roi: RotatedRoi,
@@ -101,11 +135,12 @@ def extract_edge_points(
 
     gradient = np.gradient(profiles, config.profile_step_px, axis=1)
     if config.polarity == EdgePolarity.DARK_TO_LIGHT:
-        score = gradient
+        localization_score = gradient
     elif config.polarity == EdgePolarity.LIGHT_TO_DARK:
-        score = -gradient
+        localization_score = -gradient
     else:
-        score = np.abs(gradient)
+        localization_score = np.abs(gradient)
+    score = localization_score.copy()
 
     if config.center_bias:
         normalized_offset = np.abs(across) / max(roi.width / 2.0, 1e-9)
@@ -115,27 +150,34 @@ def extract_edge_points(
     score[:, -2:] = -np.inf
     points: list[np.ndarray] = []
     strengths: list[float] = []
+    blur_widths: list[float] = []
     for row_index, row in enumerate(score):
         peak_index = int(np.argmax(row))
-        strength = float(row[peak_index])
+        localization_row = localization_score[row_index]
+        strength = float(localization_row[peak_index])
         if not np.isfinite(strength) or strength < config.min_gradient:
             continue
-        peak_position = _parabolic_peak(row, peak_index)
+        peak_position, blur_width = localize_gradient_peak(
+            localization_row, peak_index, config.profile_step_px
+        )
         across_position = float(
             np.interp(peak_position, np.arange(profile_count, dtype=np.float64), across)
         )
         point = center + along[row_index] * direction + across_position * normal
         points.append(point)
         strengths.append(strength)
+        blur_widths.append(blur_width)
 
     if not points:
         return EdgePointSet(
             points=np.empty((0, 2), dtype=np.float64),
             strengths=np.empty((0,), dtype=np.float64),
             attempted_profiles=scan_count,
+            blur_widths_px=np.empty((0,), dtype=np.float64),
         )
     return EdgePointSet(
         points=np.asarray(points, dtype=np.float64),
         strengths=np.asarray(strengths, dtype=np.float64),
         attempted_profiles=scan_count,
+        blur_widths_px=np.asarray(blur_widths, dtype=np.float64),
     )

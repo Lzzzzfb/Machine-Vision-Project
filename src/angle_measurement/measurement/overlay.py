@@ -41,29 +41,33 @@ def draw_measurement_overlay(
     image: np.ndarray,
     recipe: MeasurementRecipe,
     result: MeasurementResult,
+    show_rois: bool = True,
+    show_auxiliary: bool = True,
 ) -> np.ndarray:
     if image.ndim == 2:
         canvas = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
     else:
         canvas = image[:, :, :3].copy()
     height, width = canvas.shape[:2]
-    _draw_roi(canvas, recipe.slit_center.roi, (0, 150, 255))
-    _draw_roi(canvas, recipe.platform_left.roi, (255, 220, 0))
-    _draw_roi(canvas, recipe.platform_right.roi, (220, 80, 220))
+    if show_rois:
+        _draw_roi(canvas, recipe.slit_center.roi, (0, 150, 255))
+        _draw_roi(canvas, recipe.platform_left.roi, (255, 220, 0))
+        _draw_roi(canvas, recipe.platform_right.roi, (220, 80, 220))
 
-    for line, color in (
-        (result.line_slit, (0, 100, 255)),
-        (result.line_platform_left, (255, 220, 0)),
-        (result.line_platform_right, (220, 80, 220)),
-        (result.line_platform, (60, 255, 255)),
-    ):
-        if line is not None:
-            cv2.line(canvas, *_line_segment(line, width, height), color, 2, cv2.LINE_AA)
-    _draw_points(canvas, result.slit_edge_points, result.line_slit)
-    _draw_points(canvas, result.platform_left_edge_points, result.line_platform_left)
-    _draw_points(canvas, result.platform_right_edge_points, result.line_platform_right)
+    if show_auxiliary:
+        for line, color in (
+            (result.line_slit, (0, 100, 255)),
+            (result.line_platform_left, (255, 220, 0)),
+            (result.line_platform_right, (220, 80, 220)),
+            (result.line_platform, (60, 255, 255)),
+        ):
+            if line is not None:
+                cv2.line(canvas, *_line_segment(line, width, height), color, 2, cv2.LINE_AA)
+        _draw_points(canvas, result.slit_edge_points, result.line_slit)
+        _draw_points(canvas, result.platform_left_edge_points, result.line_platform_left)
+        _draw_points(canvas, result.platform_right_edge_points, result.line_platform_right)
 
-    if result.intersection is not None:
+    if show_auxiliary and result.intersection is not None:
         point = tuple(np.rint(result.intersection).astype(int))
         if 0 <= point[0] < width and 0 <= point[1] < height:
             cv2.drawMarker(canvas, point, (0, 0, 255), cv2.MARKER_CROSS, 18, 2)

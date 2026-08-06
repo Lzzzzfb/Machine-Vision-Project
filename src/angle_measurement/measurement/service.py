@@ -16,6 +16,7 @@ from angle_measurement.recipe import BandConfig, BrightBandConfig, MeasurementRe
 from .angle import angle_between_directions, line_intersection
 from .bright import extract_bright_line_points
 from .edge import EdgeExtractionError, extract_edge_points, to_gray_u8
+from .focus import assess_focus
 from .line import LineFitError, fit_line_ransac
 from .plane import PlaneProjectionError, backproject_pixels_to_parallel_plane, fit_world_line
 
@@ -209,6 +210,39 @@ class AngleMeasurementService:
         if not self.recipe.platform_right_confirmed:
             failures.append("平台右边缘 ROI 尚未确认")
 
+        focus_config = self.recipe.quality
+        slit_focus = assess_focus(
+            slit_points.edge_blur_widths_px,
+            slit_points.strengths,
+            slit_points.count,
+            slit_points.attempted_profiles,
+            focus_config.max_slit_edge_blur_width_px,
+            focus_config.min_focus_valid_fraction,
+        )
+        left_focus = assess_focus(
+            left_points.blur_widths_px,
+            left_points.strengths,
+            left_points.count,
+            left_points.attempted_profiles,
+            focus_config.max_platform_blur_width_px,
+            focus_config.min_focus_valid_fraction,
+        )
+        right_focus = assess_focus(
+            right_points.blur_widths_px,
+            right_points.strengths,
+            right_points.count,
+            right_points.attempted_profiles,
+            focus_config.max_platform_blur_width_px,
+            focus_config.min_focus_valid_fraction,
+        )
+        for label, assessment in (
+            ("亮狭缝", slit_focus),
+            ("平台左边缘", left_focus),
+            ("平台右边缘", right_focus),
+        ):
+            if not assessment.acceptable:
+                failures.append(f"{label}清晰度不足")
+
         projected_angle = angle_between_directions(slit_line.direction, platform_line.direction)
         slit_confidence = self._bright_confidence(
             slit_points, slit_line, self.recipe.slit_center
@@ -233,6 +267,9 @@ class AngleMeasurementService:
                 "slit_confidence": slit_confidence,
                 "platform_left_confidence": left_confidence,
                 "platform_right_confidence": right_confidence,
+                "slit_focus": slit_focus.to_dict(),
+                "platform_left_focus": left_focus.to_dict(),
+                "platform_right_focus": right_focus.to_dict(),
             }
         )
 
