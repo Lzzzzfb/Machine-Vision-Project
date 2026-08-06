@@ -10,6 +10,7 @@ dist/
 *.egg-info/
 .idea/
 .vscode/
+.superpowers/
 
 # User/runtime data
 data/input/*
